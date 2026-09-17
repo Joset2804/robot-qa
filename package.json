@@ -1,0 +1,10 @@
+{
+  "name": "npaw-channel-check",
+  "version": "1.0.0",
+  "description": "Verificación — live, EPG, Start Over y CatchUp",
+  "main": "launcher.js",
+  "license": "ISC",
+  "dependencies": {
+    "webdriverio": "^8.35.1"
+  }
+}

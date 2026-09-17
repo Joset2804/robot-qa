@@ -1,0 +1,6 @@
+{
+  "channels": [
+    { "numero": 25, "nombre": "ANIMAL PLANET HD" }
+  ],
+  "checks": ["live", "epg", "startOver", "catchup"]
+}

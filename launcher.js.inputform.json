@@ -1,0 +1,28 @@
+[
+  {
+    "element": "text",
+    "text": "Canales a verificar",
+    "icon": "tv",
+    "size": 60
+  },
+  {
+    "element": "input",
+    "type": "textarea",
+    "label": "Canales (JSON)",
+    "model": "channels",
+    "tooltip": "Array de objetos con numero y nombre. Ej: [{\"numero\":25,\"nombre\":\"ANIMAL PLANET HD\"}]",
+    "size": 60
+  },
+  {
+    "element": "text",
+    "text": "Checks a ejecutar",
+    "icon": "playlist_add_check",
+    "size": 60
+  },
+  {
+    "element": "chips",
+    "label": "checks...",
+    "model": "checks",
+    "size": 60
+  }
+]

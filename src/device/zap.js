@@ -1,19 +1,52 @@
 // src/device/zap.js
 // Zapeo con confirmación por logcat y reintentos. Lo usan todos los checks.
 //
-// Por cada intento se mandan los números y se espera el "go to channel".
-// Si llega al canal pedido, listo. Si llega a otro o el deco no
-// responde, se vuelve a intentar hasta zapAttempts veces.
+// Por cada intento:
+//   1. Si el deco está en otra app (YouTube, Netflix) → HOME
+//   2. Mandar los números
+//   3. Esperar el "go to channel" y comparar con el id del canal
+// Si llega a otro canal o el deco no responde, se vuelve a intentar
+// hasta zapAttempts veces.
 
 const keys = require('./keys');
+const ui = require('./ui');
 const { measure } = require('../measurement/mediaOpenWatcher');
 const { REASONS } = require('../results/reasons');
 
+// Revisa la app al frente y, si no es el launcher, presiona HOME.
+// Devuelve false si después de HOME sigue fuera.
+async function ensureLauncher(driver, config, tag) {
+  const pkg = await ui.currentPackage(driver);
+
+  // Si no se pudo leer, se sigue igual: la confirmación por logcat
+  // detecta de todas formas un zapeo que no llegó.
+  if (!pkg || pkg === ui.LAUNCHER_PACKAGE) return true;
+
+  logger.warn(`${tag} fuera del launcher (${pkg}) — presionando HOME`);
+  await keys.home();
+  await sleep(config.homeRecoveryWaitMs);
+
+  const after = await ui.currentPackage(driver);
+  if (after && after !== ui.LAUNCHER_PACKAGE) {
+    logger.warn(`${tag} sigue fuera del launcher (${after})`);
+    return false;
+  }
+
+  return true;
+}
+
 async function zapTo(canal, ctx, options = {}) {
-  const { logcat, config } = ctx;
+  const { driver, logcat, config } = ctx;
+  let reason = REASONS.ZAP_FAILED;
 
   for (let attempt = 1; attempt <= config.zapAttempts; attempt++) {
     const tag = `[zap] canal ${canal.numero} (${attempt}/${config.zapAttempts})`;
+
+    if (!(await ensureLauncher(driver, config, tag))) {
+      reason = REASONS.OUTSIDE_LAUNCHER;
+      continue;
+    }
+
     const mark = logcat.mark();
 
     // LIVE mide el zapeo (video y audio estables). Los demás checks
@@ -32,6 +65,8 @@ async function zapTo(canal, ctx, options = {}) {
       return { ok: true, attempts: attempt, media };
     }
 
+    reason = REASONS.ZAP_FAILED;
+
     if (channel.status === 'wrong') {
       logger.warn(`${tag} llegó a ${channel.channelId} en vez de ${canal.id}`);
     } else {
@@ -39,7 +74,7 @@ async function zapTo(canal, ctx, options = {}) {
     }
   }
 
-  return { ok: false, reason: REASONS.ZAP_FAILED, attempts: config.zapAttempts };
+  return { ok: false, reason, attempts: config.zapAttempts };
 }
 
 module.exports = { zapTo };

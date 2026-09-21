@@ -57,6 +57,10 @@ const REASONS = {
   // El deco no llegó al canal pedido tras todos los intentos de zapeo.
   // Es un problema de la automatización, no del canal: no alerta.
   ZAP_FAILED: 'zap_failed',
+
+  // El deco quedó en otra app (YouTube, Netflix) y HOME no lo sacó.
+  // Es un problema de la automatización, no del canal: no alerta.
+  OUTSIDE_LAUNCHER: 'outside_launcher',
 };
 
 // Traduce el resultado del mediaOpenWatcher a un código de fallo.

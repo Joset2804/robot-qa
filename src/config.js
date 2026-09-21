@@ -11,7 +11,11 @@ const DEFAULTS = {
 
   // Pausa tras confirmar el zapeo, para que el video cargue antes de
   // que el check empiece a navegar
-  zapSettleMs: 2500
+  zapSettleMs: 2500,
+
+  // Pausa tras presionar HOME al salir de YouTube o Netflix, para que
+  // el launcher termine de cargar antes de zapear
+  homeRecoveryWaitMs: 4000,
 };
 
 function load() {

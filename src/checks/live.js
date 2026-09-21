@@ -1,49 +1,48 @@
 // src/checks/live.js
 // Verifica que el canal emita video y audio al sintonizarlo.
 //
-// Es el check base: los demás necesitan que el canal esté cargado, así que
-// el launcher lo ejecuta siempre primero y omite el resto si este falla.
-//
-// No usa Appium — solo zapea y escucha los analizadores de la sonda.
+// El zapeo se confirma por logcat: si cae en otro canal se reintenta,
+// y solo se mide el intento que llegó al canal correcto.
 
-const keys = require('../device/keys');
-const { measure } = require('../measurement/mediaOpenWatcher');
+const zap = require('../device/zap');
 const { REASONS, reasonFromMediaResult } = require('../results/reasons');
 
 const NAME = 'live';
 
-// Ejecuta el check una vez, sin reintentos.
-// El reintento de confirmación lo maneja el launcher.
-async function attempt(canal) {
-  const media = await measure(() => keys.zapToChannel(canal.numero));
+async function attempt(canal, ctx) {
+  const z = await zap.zapTo(canal, ctx, { measure: true });
+
+  // No se llegó al canal: no se pudo probar, no es un fallo del canal
+  if (!z.ok) {
+    return { status: 'skipped', reason: z.reason, zapAttempts: z.attempts };
+  }
+
+  const media = z.media;
 
   if (media.ok) {
     return {
       status: 'ok',
+      zapAttempts: z.attempts,
       durationMs: media.durationMs,
       soundMs: media.soundMs,
-      blackMs: media.blackMs
+      blackMs: media.blackMs,
+      dynamics: media.dynamics
     };
   }
 
   return {
     status: 'fail',
     reason: reasonFromMediaResult(media),
-    // Se conservan las métricas parciales: si el video estabilizó pero el
-    // audio no, durationMs viene vacío pero blackMs sí tiene valor y ayuda
-    // a diagnosticar desde el lado de Python.
+    zapAttempts: z.attempts,
+    soundMs: media.soundMs,
     blackMs: media.blackMs,
     dynamics: media.dynamics
   };
 }
 
-// Punto de entrada del check.
-// @param canal  { numero, nombre }
-// @param driver sesión Appium — no se usa acá, se recibe por uniformidad
-// @returns { status, reason?, durationMs?, ... }
-async function run(canal, driver) {
+async function run(canal, driver, ctx) {
   try {
-    return await attempt(canal);
+    return await attempt(canal, ctx);
   } catch (err) {
     logger.error(`[${NAME}] error inesperado en canal ${canal.numero}: ${err}`);
     return { status: 'fail', reason: REASONS.UNEXPECTED_ERROR };

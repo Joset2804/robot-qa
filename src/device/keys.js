@@ -16,9 +16,11 @@ const KEYS = {
   HOME: 'KEYCODE_HOME'
 };
 
-// Pausa entre dígitos al marcar un número de canal.
-// Sin esta pausa el deco puede perder dígitos.
-const DIGIT_DELAY = 50;
+// Espacio mínimo entre dígitos. El deco pierde teclas si llegan casi
+// juntas: mandarlas en una sola llamada ADB falló en 3 de 4 canales.
+// Cada llamada ADB ya separa los dígitos ~160-250 ms por sí sola; este
+// mínimo solo actúa si alguna llamada volviera inusualmente rápido.
+const MIN_DIGIT_GAP_MS = 120;
 
 // Envía una tecla y devuelve el timestamp en que el deco la recibió.
 async function sendKey(keycode) {
@@ -34,14 +36,21 @@ const left = () => sendKey(KEYS.LEFT);
 const right = () => sendKey(KEYS.RIGHT);
 const home = () => sendKey(KEYS.HOME);
 
-// Marca un número de canal dígito por dígito y confirma con OK.
-// Devuelve el timestamp del OK final, que es el momento del zapeo real.
+// Marca el canal con una llamada ADB por dígito y confirma con OK.
+// Probado: el deco acepta el número con los dígitos separados entre
+// ~160 y ~600 ms. Devuelve el momento en que el deco recibió el OK.
 async function zapToChannel(channelNumber) {
   const digits = `${channelNumber}`.split('');
+  let lastSentAt = 0;
 
   for (const digit of digits) {
-    await devices.STB0.remotes.ADB.sendInput(`keyevent KEYCODE_${digit}`);
-    await sleep(DIGIT_DELAY);
+    const elapsed = Date.now() - lastSentAt;
+    if (lastSentAt && elapsed < MIN_DIGIT_GAP_MS) {
+      await sleep(MIN_DIGIT_GAP_MS - elapsed);
+    }
+
+    const ev = await devices.STB0.remotes.ADB.sendInput(`keyevent KEYCODE_${digit}`);
+    lastSentAt = new Date(ev.to).getTime();
   }
 
   return sendKey(KEYS.OK);

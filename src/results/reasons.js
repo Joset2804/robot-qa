@@ -50,7 +50,13 @@ const REASONS = {
 
   // Excepción no prevista durante el check. El detalle va al log,
   // no al reporte, para que el contrato quede acotado.
-  UNEXPECTED_ERROR: 'unexpected_error'
+  UNEXPECTED_ERROR: 'unexpected_error',
+
+  // ── Errores de zapeo ────────────────────────────────────────────────
+
+  // El deco no llegó al canal pedido tras todos los intentos de zapeo.
+  // Es un problema de la automatización, no del canal: no alerta.
+  ZAP_FAILED: 'zap_failed',
 };
 
 // Traduce el resultado del mediaOpenWatcher a un código de fallo.

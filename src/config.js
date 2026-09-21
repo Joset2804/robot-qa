@@ -16,6 +16,9 @@ const DEFAULTS = {
   // Pausa tras presionar HOME al salir de YouTube o Netflix, para que
   // el launcher termine de cargar antes de zapear
   homeRecoveryWaitMs: 4000,
+
+  // Intentos de abrir el miniguide y leer el título del programa
+  epgReadAttempts: 5,
 };
 
 function load() {

@@ -74,6 +74,12 @@ const REASONS = {
 
   // Con el programa ya avanzado, el Start Over siguió sin arrancar.
   STARTOVER_UNAVAILABLE: 'startover_unavailable',
+
+  // Se presionó "Reproducir" y el deco siguió en el LIVE.
+  CATCHUP_NOT_STARTED: 'catchup_not_started',
+
+  // Tras navegar, no apareció el botón "Reproducir".
+  PLAY_BUTTON_NOT_FOUND: 'play_button_not_found',
 };
 
 // Traduce el resultado del mediaOpenWatcher a un código de fallo.

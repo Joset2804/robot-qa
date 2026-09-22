@@ -1,89 +1,172 @@
 // src/checks/catchup.js
-// Verifica que el contenido pasado (CatchUp) reproduzca con video y audio.
+// Verifica que el catchup (programa anterior) reproduzca, del canal
+// correcto, con video y audio.
 //
-// Es el check con más navegación. Secuencia:
-//   LEFT  → abre la guía rápida sobre el LIVE
-//   UP    → posiciona en el programa que se emite ahora
-//   LEFT  → retrocede al programa anterior
-//   OK    → abre la pantalla de detalle del programa
-//   OK    → reproduce (acá se mide)
-//
-// Necesita el miniguide del zapeo CERRADO: con él abierto el primer LEFT
-// no abre la guía rápida, simplemente no hace nada.
+//   1. Navegación (hasta navAttempts intentos):
+//        esperar el ciclo del miniguide del zapeo
+//        LEFT → UP → LEFT → OK, con esperas fijas entre teclas
+//        confirmar que apareció el botón "Reproducir"
+//      Si no aparece, se zapea al canal y se reintenta.
+//   2. OK: empieza el catchup; se mide video y audio
+//   3. Dejarlo reproducir catchupPlaySec desde el OK
+//   4. Zapeo de salida: el primer evento del logcat reporta lo que se
+//      estaba reproduciendo, y el LIVE que llega después trae el número
+//      del canal
 
 const keys = require('../device/keys');
 const ui = require('../device/ui');
+const zap = require('../device/zap');
+const miniguide = require('../device/miniguide');
 const { measure } = require('../measurement/mediaOpenWatcher');
 const { REASONS, reasonFromMediaResult } = require('../results/reasons');
 
 const NAME = 'catchup';
 
-// Máximo de espera a que el miniguide del zapeo se cierre solo.
-const HIDE_TIMEOUT = 10000;
+// Máximo de espera al LIVE que llega tras el zapeo de salida
+const INCOMING_TIMEOUT_MS = 10000;
 
-// Espera tras cada tecla de navegación para que la UI reaccione.
-const NAV_DELAY = 1500;
-
-// Espera tras el primer OK, para que la pantalla de detalle del programa
-// cargue su botón de reproducir.
-const DETAIL_DELAY = 3000;
-
-// Espera tras el último OK, para que la reproducción se estabilice.
-const SETTLE_DELAY = 2000;
-
-async function attempt(canal, driver) {
-  // Con el miniguide abierto el LEFT no abre la guía rápida
-  const hidden = await ui.waitMiniguideHidden(driver, HIDE_TIMEOUT);
-
-  if (!hidden) {
-    return { status: 'fail', reason: REASONS.MINIGUIDE_STUCK };
+// Veredicto a partir de lo que reportó la salida.
+//
+// Principio: fail solo cuando la salida prueba que se reprodujo el
+// catchup del canal correcto y aun así falló el video, el audio o el
+// avance. Si la salida no demuestra que estábamos en el lugar correcto,
+// es la interfaz: skipped, se reintenta desde el zapeo y no alerta.
+function judge(outgoing, incoming, media) {
+  if (!outgoing || !incoming) {
+    return { status: 'skipped', reason: REASONS.NO_PLAYBACK_LOG };
   }
 
-  // Navegar hasta el programa anterior del canal
-  await keys.left();
-  await sleep(NAV_DELAY);
+  const sameNumber = outgoing.serviceId === incoming.serviceId;
 
-  await keys.up();
-  await sleep(NAV_DELAY);
+  if (outgoing.host === 'securecatchup') {
+    if (!sameNumber) {
+      return { status: 'skipped', reason: REASONS.WRONG_CHANNEL, retryable: true };
+    }
 
-  await keys.left();
-  await sleep(NAV_DELAY);
+    // Desde acá está confirmado el catchup del canal: los fallos son reales
 
-  // Abrir el detalle del programa
-  await keys.ok();
-  await sleep(DETAIL_DELAY);
+    if (!(outgoing.position > 0)) {
+      return { status: 'fail', reason: REASONS.NO_VIDEO };
+    }
 
-  // Pausa adicional para que los eventos de video y audio generados por
-  // la navegación (LEFT, UP, LEFT, OK) terminen de emitirse antes de
-  // arrancar la medición. Sin esto el watcher captura eventos residuales
-  // y reporta duraciones inconsistentes entre corridas.
-  await sleep(SETTLE_DELAY);
+    if (!media.ok) {
+      return { status: 'fail', reason: reasonFromMediaResult(media) };
+    }
 
-  // Reproducir y medir
-  const media = await measure(() => keys.ok());
-
-  if (media.ok) {
-    return {
-      status: 'ok',
-      durationMs: media.durationMs,
-      soundMs: media.soundMs,
-      blackMs: media.blackMs,
-      dynamics: media.dynamics
-    };
+    return { status: 'ok' };
   }
 
-  return {
-    status: 'fail',
-    reason: reasonFromMediaResult(media),
-    soundMs: media.soundMs,
-    blackMs: media.blackMs,
-    dynamics: media.dynamics
-  };
+  if (outgoing.host === 'securelive') {
+    // Siguió en el LIVE del canal: puede ser el servicio o el OK cayó en
+    // otro botón, no se puede saber
+    if (sameNumber) {
+      return { status: 'skipped', reason: REASONS.CATCHUP_NOT_STARTED, retryable: true };
+    }
+    // En LIVE de otro canal: la navegación cambió de canal
+    return { status: 'skipped', reason: REASONS.WRONG_CHANNEL, retryable: true };
+  }
+
+  // securestartover u otro: la navegación eligió otra opción
+  return { status: 'skipped', reason: REASONS.WRONG_MODE, retryable: true };
 }
 
-async function run(canal, driver) {
+// Navega hasta la pantalla de detalle del programa anterior.
+// Devuelve { ok, attempts, reason? }
+async function navigate(canal, ctx) {
+  const { driver, config } = ctx;
+
+  for (let attempt = 1; attempt <= config.navAttempts; attempt++) {
+    const tag = `[${NAME}] canal ${canal.numero} navegación ${attempt}/${config.navAttempts}`;
+
+    // El primer intento parte del zapeo del launcher. Los siguientes
+    // vuelven a zapear: el intento fallido pudo dejar el deco en la guía,
+    // en una pantalla de detalle o en otro canal.
+    if (attempt > 1) {
+      const z = await zap.zapTo(canal, ctx);
+      if (!z.ok) return { ok: false, attempts: attempt, reason: z.reason };
+    }
+
+    await miniguide.waitCycle(driver, tag);
+
+    // Tiempos fijos, sin consultas a Appium entre teclas: cada consulta
+    // retrasa la siguiente tecla y la lista se cierra sola a los ~4 s
+    await keys.left();
+    await sleep(config.catchupGuideOpenMs);
+    await keys.up();
+    await sleep(config.catchupStepMs);
+    await keys.left();
+    await sleep(config.catchupStepMs);
+    await keys.ok();
+
+    if (await ui.waitPlayButton(driver, config.catchupDetailTimeoutMs)) {
+      if (attempt > 1) logger.info(`${tag} llegó a "Reproducir"`);
+      return { ok: true, attempts: attempt };
+    }
+
+    logger.warn(`${tag} no apareció "Reproducir"`);
+  }
+
+  return { ok: false, attempts: config.navAttempts, reason: REASONS.PLAY_BUTTON_NOT_FOUND };
+}
+
+async function attempt(canal, ctx) {
+  const { logcat, config } = ctx;
+  const tag = `[${NAME}] canal ${canal.numero}`;
+
+  // 1. Navegación hasta "Reproducir"
+  const nav = await navigate(canal, ctx);
+  if (!nav.ok) {
+    // retryable: el launcher lo volverá a intentar desde el zapeo
+    return { status: 'skipped', reason: nav.reason, retryable: true, navAttempts: nav.attempts };
+  }
+
+  // 2. Reproducir, midiendo video y audio
+  const okAt = Date.now();
+  const media = await measure(() => keys.ok());
+
+  // 3. Completar el tiempo de reproducción desde el OK. La medición ocurre
+  //    dentro de este tiempo (máximo 18 s), así que no suma espera.
+  const remaining = config.catchupPlaySec * 1000 - (Date.now() - okAt);
+  if (remaining > 0) await sleep(remaining);
+
+  // 4. Zapeo de salida. La marca va antes: el primer evento posterior
+  //    reporta lo que se estaba reproduciendo.
+  const mark = logcat.mark();
+  const exit = await zap.zapTo(canal, ctx);
+  if (!exit.ok) {
+    return { status: 'skipped', reason: exit.reason, navAttempts: nav.attempts };
+  }
+
+  // Primero el LIVE entrante: cuando llega, el saliente ya está en el buffer
+  const incoming = await logcat.waitForIncomingLive(mark, INCOMING_TIMEOUT_MS);
+  const outgoing = logcat.outgoingAfter(mark);
+
+  const seen = outgoing
+    ? `${outgoing.host} /${outgoing.serviceId}/ position=${outgoing.position}`
+    : 'sin evento';
+  logger.info(`${tag} salida: ${seen} | canal /${incoming ? incoming.serviceId : '-'}/`);
+
+  const result = Object.assign(judge(outgoing, incoming, media), {
+    navAttempts: nav.attempts,
+    observedMode: outgoing ? outgoing.host : undefined,
+    serviceId: incoming ? incoming.serviceId : undefined,
+    position: outgoing ? outgoing.position : undefined
+  });
+
+  // La medición solo se reporta si la salida confirmó el catchup
+  if (outgoing && outgoing.host === 'securecatchup') {
+    result.durationMs = media.durationMs;
+    result.soundMs = media.soundMs;
+    result.blackMs = media.blackMs;
+    result.dynamics = media.dynamics;
+  }
+
+  return result;
+}
+
+async function run(canal, driver, ctx) {
   try {
-    return await attempt(canal, driver);
+    return await attempt(canal, ctx);
   } catch (err) {
     logger.error(`[${NAME}] error inesperado en canal ${canal.numero}: ${err}`);
     return { status: 'fail', reason: REASONS.UNEXPECTED_ERROR };

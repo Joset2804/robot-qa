@@ -31,8 +31,11 @@ const FOCUS_DELAY_MS = 800;
 const INCOMING_TIMEOUT_MS = 10000;
 
 // Veredicto a partir de lo que reportó la salida.
-// Primero la URL: si no confirma el Start Over del canal, la medición
-// de video y audio no cuenta, porque lo medido era el LIVE.
+//
+// Principio: fail solo cuando la salida prueba que se reprodujo el
+// Start Over del canal correcto y aun así falló el video, el audio o el
+// avance. Si la salida no demuestra que estábamos en el lugar correcto,
+// es la interfaz: skipped, se reintenta desde el zapeo y no alerta.
 function judge(outgoing, incoming, media) {
   if (!outgoing || !incoming) {
     return { status: 'skipped', reason: REASONS.NO_PLAYBACK_LOG };
@@ -43,19 +46,21 @@ function judge(outgoing, incoming, media) {
   if (outgoing.host === 'securelive') {
     // Seguía en el LIVE del canal: el Start Over no arrancó
     if (sameNumber) return { notStarted: true };
-    // Seguía en LIVE, pero de otro canal: la navegación cambió de canal
-    return { status: 'fail', reason: REASONS.WRONG_CHANNEL };
+    // En LIVE de otro canal: la navegación cambió de canal
+    return { status: 'skipped', reason: REASONS.WRONG_CHANNEL, retryable: true };
   }
 
   if (outgoing.host !== 'securestartover') {
-    return { status: 'fail', reason: REASONS.WRONG_MODE };
+    // La navegación eligió otra opción
+    return { status: 'skipped', reason: REASONS.WRONG_MODE, retryable: true };
   }
 
   if (!sameNumber) {
-    return { status: 'fail', reason: REASONS.WRONG_CHANNEL };
+    return { status: 'skipped', reason: REASONS.WRONG_CHANNEL, retryable: true };
   }
 
-  // position = 0: el Start Over quedó trabado en el primer cuadro
+  // Desde acá está confirmado el Start Over del canal: los fallos son reales
+
   if (!(outgoing.position > 0)) {
     return { status: 'fail', reason: REASONS.NO_VIDEO };
   }
@@ -144,11 +149,10 @@ async function attempt(canal, ctx) {
 
   if (second.notStarted) {
     delete second.notStarted;
-    // final: la espera ya fue su reintento, el launcher no lo repite
+
     return Object.assign(second, {
-      status: 'fail',
+      status: 'skipped',
       reason: REASONS.STARTOVER_UNAVAILABLE,
-      final: true,
       startOverTries: 2
     });
   }

@@ -21,6 +21,12 @@ const SHOW_TIMEOUT_MS = 5000;
 // Pausa entre un intento y el siguiente
 const RETRY_PAUSE_MS = 1000;
 
+// Máximo de espera a que aparezca el miniguide del zapeo
+const APPEAR_TIMEOUT_MS = 6000;
+
+// Margen tras el cierre, para que termine la animación
+const CLOSE_MARGIN_MS = 1000;
+
 // Devuelve { ok, attempts, reason? }
 // options.hideTimeoutMs / showTimeoutMs permiten acortar las esperas
 // en pruebas; options.tag es el prefijo de los logs.
@@ -58,4 +64,24 @@ async function openFresh(driver, config, options = {}) {
   return { ok: false, attempts: config.navAttempts, reason };
 }
 
-module.exports = { openFresh };
+// El miniguide del zapeo tarda un momento en aparecer. Si solo se espera
+// a que "no esté", puede darse por cerrado antes de que aparezca, y las
+// teclas siguientes caen sobre él. Se espera verlo aparecer y después
+// cerrarse, con un margen para la animación.
+async function waitCycle(driver, tag) {
+  const appeared = await ui.waitMiniguideVisible(driver, APPEAR_TIMEOUT_MS);
+  if (!appeared) {
+    logger.info(`${tag} el miniguide no apareció tras el zapeo`);
+  }
+
+  const hidden = await ui.waitMiniguideHidden(driver, HIDE_TIMEOUT_MS);
+  if (!hidden) {
+    logger.warn(`${tag} el miniguide no se cerró — BACK`);
+    await keys.back();
+    await sleep(RETRY_PAUSE_MS);
+  }
+
+  await sleep(CLOSE_MARGIN_MS);
+}
+
+module.exports = { openFresh, waitCycle };

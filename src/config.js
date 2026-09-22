@@ -29,6 +29,14 @@ const DEFAULTS = {
   // Si el Start Over no arrancó, se espera a completar este tiempo desde
   // el inicio del check antes de la segunda prueba
   startOverMinLiveSec: 60,
+
+  // Navegación de catchup
+  catchupGuideOpenMs: 3500,     // LEFT → aparece la lista de canales y programas
+  catchupStepMs: 2500,          // tras UP y tras el segundo LEFT
+  catchupDetailTimeoutMs: 8000, // máximo esperando el botón "Reproducir"
+
+  // Segundos que se deja reproducir el catchup antes de salir
+  catchupPlaySec: 20,
 };
 
 function load() {

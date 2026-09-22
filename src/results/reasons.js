@@ -80,6 +80,10 @@ const REASONS = {
 
   // Tras navegar, no apareció el botón "Reproducir".
   PLAY_BUTTON_NOT_FOUND: 'play_button_not_found',
+
+  // Se llegó a la pantalla del programa anterior y no ofrece reproducirlo:
+  // ese programa no tiene catchup.
+  NO_CATCHUP_AVAILABLE: 'no_catchup_available',
 };
 
 // Traduce el resultado del mediaOpenWatcher a un código de fallo.

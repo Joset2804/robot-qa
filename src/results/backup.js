@@ -27,29 +27,27 @@ async function ensureDir() {
   }
 }
 
-// Escribe una línea por canal verificado.
-// Un objeto por canal en vez de uno por ejecución, para que el archivo
-// sea consultable línea a línea sin parsear estructuras anidadas.
-async function save(channelResults, meta = {}) {
+// Guarda un canal. Se llama apenas termina, no al final de la ejecución:
+// una pasada del catálogo dura horas, y si se interrumpe no se pierde
+// lo ya verificado.
+async function saveChannel(entry) {
   await ensureDir();
 
-  const probe = require('os').hostname();
-  const timestamp = new Date().toISOString();
-
-  const lines = channelResults.map(entry => JSON.stringify({
-    timestamp,
-    probe,
+  const line = JSON.stringify({
+    timestamp: new Date().toISOString(),
+    probe: require('os').hostname(),
     channel: entry.channel,
     channelName: entry.channelName,
+    startedAt: entry.startedAt,
+    finishedAt: entry.finishedAt,
     checks: entry.checks
-  })).join('\n') + '\n';
+  }) + '\n';
 
   try {
-    await fs.appendFile(currentFile(), lines);
-    logger.debug(`[backup] ${channelResults.length} canales guardados`);
+    await fs.appendFile(currentFile(), line);
   } catch (err) {
     // Un fallo de respaldo no debe afectar la ejecución
-    logger.warn(`[backup] no se pudo guardar: ${err}`);
+    logger.warn(`[backup] no se pudo guardar el canal ${entry.channel}: ${err}`);
   }
 }
 
@@ -87,4 +85,4 @@ async function cleanup() {
   }
 }
 
-module.exports = { save, cleanup, currentFile, RETENTION_DAYS };
+module.exports = { saveChannel, cleanup, currentFile, RETENTION_DAYS };

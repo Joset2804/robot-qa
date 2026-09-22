@@ -98,12 +98,22 @@ async function navigate(canal, ctx) {
     await sleep(config.catchupStepMs);
     await keys.ok();
 
-    if (await ui.waitPlayButton(driver, config.catchupDetailTimeoutMs)) {
+    const screen = await ui.waitDetailScreen(driver, config.catchupDetailTimeoutMs);
+
+    if (screen.play) {
       if (attempt > 1) logger.info(`${tag} llegó a "Reproducir"`);
       return { ok: true, attempts: attempt };
     }
 
-    logger.warn(`${tag} no apareció "Reproducir"`);
+    // Llegó a la pantalla del programa anterior, pero no ofrece
+    // reproducirlo: ese programa no tiene catchup. No es un problema
+    // de navegación, así que no tiene sentido reintentar.
+    if (screen.detail) {
+      logger.warn(`${tag} detalle del programa detectado (details_title) pero sin botón "Reproducir": el programa no tiene catchup`);
+      return { ok: false, attempts: attempt, noCatchup: true };
+    }
+
+    logger.warn(`${tag} no se detectó la pantalla de detalle (sin details_title): la navegación no llegó`);
   }
 
   return { ok: false, attempts: config.navAttempts, reason: REASONS.PLAY_BUTTON_NOT_FOUND };
@@ -116,6 +126,17 @@ async function attempt(canal, ctx) {
   // 1. Navegación hasta "Reproducir"
   const nav = await navigate(canal, ctx);
   if (!nav.ok) {
+    // Llegó a la pantalla y el programa no ofrece catchup: es un hallazgo
+    // del servicio, no de la automatización
+    if (nav.noCatchup) {
+      return {
+        status: 'fail',
+        reason: REASONS.NO_CATCHUP_AVAILABLE,
+        final: true,
+        navAttempts: nav.attempts
+      };
+    }
+
     // retryable: el launcher lo volverá a intentar desde el zapeo
     return { status: 'skipped', reason: nav.reason, retryable: true, navAttempts: nav.attempts };
   }

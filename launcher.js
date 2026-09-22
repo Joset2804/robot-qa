@@ -52,6 +52,8 @@ async function runCheck(check, canal, ctx) {
   let result;
   let tries = 0;
 
+  const startedAt = new Date().toISOString();
+
   logger.info(`[${check.name}] canal ${canal.numero} — iniciando`);
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -94,6 +96,9 @@ async function runCheck(check, canal, ctx) {
 
   if (tries > 1) result.retried = true;
 
+  result.startedAt = startedAt;
+  result.finishedAt = new Date().toISOString();
+
   clean(result);
   logFinal(check, canal, result);
   return result;
@@ -101,6 +106,7 @@ async function runCheck(check, canal, ctx) {
 
 async function runChannel(canal, selected, reportsLive, ctx) {
   const results = {};
+  const startedAt = new Date().toISOString();
 
   for (const check of selected) {
     results[check.name] = await runCheck(check, canal, ctx);
@@ -108,7 +114,13 @@ async function runChannel(canal, selected, reportsLive, ctx) {
 
   if (!reportsLive) delete results.live;
 
-  return results;
+  return {
+    channel: canal.numero,
+    channelName: canal.nombre,
+    startedAt,
+    finishedAt: new Date().toISOString(),
+    checks: results
+  };
 }
 
 async function main() {
@@ -158,13 +170,12 @@ async function main() {
       const canal = channels[i];
       logger.info(`[launcher] (${i + 1}/${channels.length}) canal ${canal.numero} — ${canal.nombre || ''}`);
 
-      const checkResults = await runChannel(canal, selected, reportsLive, ctx);
+      const entry = await runChannel(canal, selected, reportsLive, ctx);
 
-      channelResults.push({
-        channel: canal.numero,
-        channelName: canal.nombre,
-        checks: checkResults
-      });
+      // Se guarda enseguida: si la ejecución se interrumpe, lo ya
+      // verificado queda en disco
+      await backup.saveChannel(entry);
+      channelResults.push(entry);
     }
 
     completed = true;
@@ -176,8 +187,6 @@ async function main() {
     logcat.stop();
     await ui.closeSession(driver);
   }
-
-  await backup.save(channelResults);
 
   return report.publish(channelResults, Object.assign({ completed }, meta));
 }

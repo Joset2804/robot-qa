@@ -26,25 +26,49 @@ function liveFirst(selected) {
     .concat(selected.filter(c => c.name !== 'live'));
 }
 
+// Las marcas retryable y final son para que el check le hable al
+// launcher; no son datos del resultado y no van al reporte.
+function clean(result) {
+  delete result.retryable;
+  delete result.final;
+  return result;
+}
+
+function logFinal(check, canal, result) {
+  const label = `[${check.name}] canal ${canal.numero}`;
+
+  if (result.status === 'ok') {
+    const extra = result.durationMs ? ` (${result.durationMs}ms)` : '';
+    const note = result.retried ? ' tras reintento' : '';
+    logger.info(`${label} — OK${extra}${note}`);
+  } else if (result.status === 'skipped') {
+    logger.warn(`${label} — OMITIDO (${result.reason})`);
+  } else {
+    logger.error(`${label} — FALLÓ (${result.reason})`);
+  }
+}
+
 async function runCheck(check, canal, ctx) {
   let result;
+  let tries = 0;
 
   logger.info(`[${check.name}] canal ${canal.numero} — iniciando`);
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    // Cada intento arranca desde el LIVE del canal. Sin esto, el reintento
-    // partiría del estado en que lo dejó el intento anterior: dentro de
-    // un catchup, en pausa o en otro canal.
+    tries = attempt;
+
+    // Cada intento arranca desde el LIVE del canal.
     // LIVE no lo necesita: su propio zapeo es la medición.
     if (check.name !== 'live') {
       const z = await zap.zapTo(canal, ctx);
 
       if (!z.ok) {
         // Primer intento: no se pudo probar → omitido.
-        // Reintento: ya hubo un fallo real antes, se reporta ese.
-        if (result) break;
-        logger.warn(`[${check.name}] canal ${canal.numero} — OMITIDO (${z.reason})`);
-        return { status: 'skipped', reason: z.reason, zapAttempts: z.attempts };
+        // Reintento: se reporta lo que dio el intento anterior.
+        if (!result) {
+          result = { status: 'skipped', reason: z.reason, zapAttempts: z.attempts };
+        }
+        break;
       }
 
       await sleep(ctx.config.zapSettleMs);
@@ -52,27 +76,26 @@ async function runCheck(check, canal, ctx) {
 
     result = await check.module.run(canal, ctx.driver, ctx);
 
-    if (result.status === 'ok') {
-      if (attempt > 1) result.retried = true;
-      const extra = result.durationMs ? ` (${result.durationMs}ms)` : '';
-      logger.info(`[${check.name}] canal ${canal.numero} — OK${extra}`);
-      return result;
-    }
+    // ¿Vale la pena otro intento?
+    //   fail normal               → sí
+    //   fail con final            → no, ya tuvo su reintento interno
+    //   skipped con retryable     → sí, desde el zapeo
+    //   skipped normal            → no, el zapeo ya hizo sus intentos
+    const retry =
+      (result.status === 'fail' && !result.final) ||
+      (result.status === 'skipped' && result.retryable);
 
-    // Un skipped viene del zapeo, que ya hizo sus propios intentos
-    if (result.status === 'skipped') {
-      logger.warn(`[${check.name}] canal ${canal.numero} — OMITIDO (${result.reason})`);
-      return result;
-    }
+    if (!retry || attempt === MAX_ATTEMPTS) break;
 
-    if (attempt < MAX_ATTEMPTS) {
-      logger.warn(`[${check.name}] canal ${canal.numero} — falló (${result.reason}), reintentando`);
-      await sleep(RETRY_DELAY);
-    }
+    const what = result.status === 'fail' ? 'falló' : 'no se pudo ejecutar';
+    logger.warn(`[${check.name}] canal ${canal.numero} — ${what} (${result.reason}), reintentando`);
+    await sleep(RETRY_DELAY);
   }
 
-  result.retried = true;
-  logger.error(`[${check.name}] canal ${canal.numero} — FALLÓ (${result.reason})`);
+  if (tries > 1) result.retried = true;
+
+  clean(result);
+  logFinal(check, canal, result);
   return result;
 }
 

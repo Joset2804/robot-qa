@@ -61,6 +61,19 @@ const REASONS = {
   // El deco quedó en otra app (YouTube, Netflix) y HOME no lo sacó.
   // Es un problema de la automatización, no del canal: no alerta.
   OUTSIDE_LAUNCHER: 'outside_launcher',
+
+  // La salida no reportó ningún evento de reproducción: no se puede verificar.
+  NO_PLAYBACK_LOG: 'no_playback_log',
+
+  // Reprodujo otro modo (ej: catchup en vez de Start Over).
+  WRONG_MODE: 'wrong_mode',
+
+  // El número de la URL no coincide con el del canal: la navegación
+  // cambió de canal.
+  WRONG_CHANNEL: 'wrong_channel',
+
+  // Con el programa ya avanzado, el Start Over siguió sin arrancar.
+  STARTOVER_UNAVAILABLE: 'startover_unavailable',
 };
 
 // Traduce el resultado del mediaOpenWatcher a un código de fallo.

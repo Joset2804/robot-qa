@@ -19,6 +19,16 @@ const DEFAULTS = {
 
   // Intentos de abrir el miniguide y leer el título del programa
   epgReadAttempts: 5,
+
+  // Intentos de dejar el miniguide cerrado y volver a abrirlo con OK
+  navAttempts: 3,
+
+  // Segundos que se deja reproducir el Start Over antes de salir
+  startOverPlaySec: 20,
+
+  // Si el Start Over no arrancó, se espera a completar este tiempo desde
+  // el inicio del check antes de la segunda prueba
+  startOverMinLiveSec: 60,
 };
 
 function load() {

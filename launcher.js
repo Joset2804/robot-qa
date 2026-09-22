@@ -12,6 +12,7 @@ const checks = require('./src/checks');
 const report = require('./src/results/report');
 const backup = require('./src/results/backup');
 const config = require('./src/config');
+const telegram = require('./src/results/telegram');
 
 // Intentos por check: el original más uno de confirmación.
 const MAX_ATTEMPTS = 2;
@@ -175,6 +176,7 @@ async function main() {
       // Se guarda enseguida: si la ejecución se interrumpe, lo ya
       // verificado queda en disco
       await backup.saveChannel(entry);
+      await telegram.alertChannel(entry, input.telegram);
       channelResults.push(entry);
     }
 

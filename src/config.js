@@ -37,6 +37,13 @@ const DEFAULTS = {
 
   // Segundos que se deja reproducir el catchup antes de salir
   catchupPlaySec: 20,
+
+  // Diferencia horaria de la sonda respecto a UTC, para el nombre del
+  // archivo NDJSON y la hora de las alertas de Telegram.
+  // Chile: -3 en verano, -4 en invierno. Perú: -5.
+  // Los campos del NDJSON quedan en UTC: son comparables entre sondas
+  // y no se rompen con el cambio de horario.
+  utcOffset: -3,
 };
 
 function load() {

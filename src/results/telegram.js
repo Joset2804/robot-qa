@@ -10,6 +10,7 @@
 const https = require('https');
 const os = require('os');
 const { REASONS } = require('./reasons');
+const localTime = require('../localTime');
 
 const TIMEOUT_MS = 10000;
 
@@ -95,7 +96,7 @@ function escape(text) {
 
 // Envía la alerta de un canal, si tiene checks fallidos.
 // entry es lo que devuelve runChannel.
-async function alertChannel(entry, config) {
+async function alertChannel(entry, config, utcOffset) {
   if (!config || !config.enabled || !config.botToken || !config.chatId) return;
 
   const lines = Object.keys(entry.checks)
@@ -109,7 +110,7 @@ async function alertChannel(entry, config) {
 
   const name = entry.channelName ? ` · ${escape(entry.channelName)}` : '';
   const header = `⚠️ <b>Canal ${entry.channel}${name}</b>`;
-  const meta = `<i>${escape(os.hostname())} · ${shortTime(entry.finishedAt)}</i>`;
+  const meta = `<i>${escape(os.hostname())} · ${localTime.localShort(entry.finishedAt, utcOffset)}</i>`;
   const text = `${header}\n${meta}\n\n${lines.join('\n')}`;
 
   try {

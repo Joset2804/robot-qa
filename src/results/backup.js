@@ -6,6 +6,7 @@
 // Retención de 5 días para no llenar el disco de la sonda.
 
 const path = require('path');
+const localTime = require('../localTime');
 
 const DIR = path.join(__dirname, '..', '..', 'data');
 const PREFIX = 'check_';
@@ -14,9 +15,8 @@ const RETENTION_DAYS = 5;
 // Nombre de archivo del día actual.
 // Se calcula en cada llamada, no una vez al arrancar, para que una
 // ejecución que cruce la medianoche escriba en el archivo correcto.
-function currentFile() {
-  const today = new Date().toISOString().split('T')[0];
-  return path.join(DIR, `${PREFIX}${today}.ndjson`);
+function currentFile(utcOffset) {
+  return path.join(DIR, `${PREFIX}${localTime.localDate(null, utcOffset)}.ndjson`);
 }
 
 async function ensureDir() {
@@ -30,7 +30,7 @@ async function ensureDir() {
 // Guarda un canal. Se llama apenas termina, no al final de la ejecución:
 // una pasada del catálogo dura horas, y si se interrumpe no se pierde
 // lo ya verificado.
-async function saveChannel(entry) {
+async function saveChannel(entry, utcOffset) {
   await ensureDir();
 
   const line = JSON.stringify({
@@ -44,18 +44,19 @@ async function saveChannel(entry) {
   }) + '\n';
 
   try {
-    await fs.appendFile(currentFile(), line);
+    await fs.appendFile(currentFile(utcOffset), line);
   } catch (err) {
-    // Un fallo de respaldo no debe afectar la ejecución
     logger.warn(`[backup] no se pudo guardar el canal ${entry.channel}: ${err}`);
   }
 }
 
 // Borra los archivos anteriores a la ventana de retención.
 // Se llama al inicio de cada ejecución.
-async function cleanup() {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - RETENTION_DAYS);
+async function cleanup(utcOffset) {
+  const cutoff = localTime.localDate(
+    new Date(Date.now() - RETENTION_DAYS * 86400000),
+    utcOffset
+  );
 
   let files;
   try {
@@ -68,13 +69,11 @@ async function cleanup() {
   for (const file of files) {
     if (!file.startsWith(PREFIX) || !file.endsWith('.ndjson')) continue;
 
-    // check_2026-09-13.ndjson → 2026-09-13
+    // check_2026-09-22.ndjson → 2026-09-22
     const datePart = file.slice(PREFIX.length, -'.ndjson'.length);
-    const fileDate = new Date(datePart);
 
-    if (isNaN(fileDate.getTime())) continue;
-
-    if (fileDate < cutoff) {
+    // Las fechas en yyyy-mm-dd se comparan bien como texto
+    if (datePart < cutoff) {
       try {
         await fs.unlink(path.join(DIR, file));
         logger.info(`[backup] eliminado ${file}`);

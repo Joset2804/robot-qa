@@ -148,7 +148,7 @@ async function main() {
 
   logger.info(`[launcher] ${channels.length} canal(es), checks: ${selected.map(c => c.name).join(', ')}`);
 
-  await backup.cleanup();
+  await backup.cleanup(cfg.utcOffset);
 
   const logcat = new Logcat();
   logcat.start();
@@ -175,8 +175,8 @@ async function main() {
 
       // Se guarda enseguida: si la ejecución se interrumpe, lo ya
       // verificado queda en disco
-      await backup.saveChannel(entry);
-      await telegram.alertChannel(entry, input.telegram);
+      await backup.saveChannel(entry, cfg.utcOffset);
+      await telegram.alertChannel(entry, input.telegram, cfg.utcOffset);
       channelResults.push(entry);
     }
 

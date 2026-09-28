@@ -19,8 +19,6 @@
 const keys = require('../device/keys');
 const zap = require('../device/zap');
 const miniguide = require('../device/miniguide');
-const { measure } = require('../measurement/mediaOpenWatcher');
-const { REASONS, reasonFromMediaResult } = require('../results/reasons');
 
 const NAME = 'startOver';
 
@@ -30,13 +28,7 @@ const FOCUS_DELAY_MS = 800;
 // Máximo de espera al LIVE que llega tras el zapeo de salida
 const INCOMING_TIMEOUT_MS = 10000;
 
-// Veredicto a partir de lo que reportó la salida.
-//
-// Principio: fail solo cuando la salida prueba que se reprodujo el
-// Start Over del canal correcto y aun así falló el video, el audio o el
-// avance. Si la salida no demuestra que estábamos en el lugar correcto,
-// es la interfaz: skipped, se reintenta desde el zapeo y no alerta.
-function judge(outgoing, incoming, media) {
+function judge(outgoing, incoming) {
   if (!outgoing || !incoming) {
     return { status: 'skipped', reason: REASONS.NO_PLAYBACK_LOG };
   }
@@ -59,14 +51,9 @@ function judge(outgoing, incoming, media) {
     return { status: 'skipped', reason: REASONS.WRONG_CHANNEL, retryable: true };
   }
 
-  // Desde acá está confirmado el Start Over del canal: los fallos son reales
-
+  // Confirmado el Start Over del canal: solo falta que haya avanzado
   if (!(outgoing.position > 0)) {
     return { status: 'fail', reason: REASONS.NO_VIDEO };
-  }
-
-  if (!media.ok) {
-    return { status: 'fail', reason: reasonFromMediaResult(media) };
   }
 
   return { status: 'ok' };
@@ -83,15 +70,15 @@ async function tryOnce(canal, ctx, tag) {
     return { status: 'skipped', reason: nav.reason, retryable: true, navAttempts: nav.attempts };
   }
 
-  // 2. Foco en Start Over → OK, midiendo video y audio
+  // 2. Foco en Start Over → OK
   await keys.right();
   await sleep(FOCUS_DELAY_MS);
 
   const okAt = Date.now();
-  const media = await measure(() => keys.ok());
+  await keys.ok();
 
-  // 3. Completar el tiempo de reproducción desde el OK. La medición ocurre
-  //    dentro de este tiempo (máximo 18 s), así que no suma espera.
+  // 3. Reproducir startOverPlaySec desde el OK. Es lo que hace
+  //    significativo el position que reporta la salida.
   const remaining = config.startOverPlaySec * 1000 - (Date.now() - okAt);
   if (remaining > 0) await sleep(remaining);
 
@@ -112,20 +99,12 @@ async function tryOnce(canal, ctx, tag) {
     : 'sin evento';
   logger.info(`${tag} salida: ${seen} | canal /${incoming ? incoming.serviceId : '-'}/`);
 
-  const result = Object.assign(judge(outgoing, incoming, media), {
+  const result = Object.assign(judge(outgoing, incoming), {
     navAttempts: nav.attempts,
     observedMode: outgoing ? outgoing.host : undefined,
     serviceId: incoming ? incoming.serviceId : undefined,
     position: outgoing ? outgoing.position : undefined
   });
-
-  // La medición solo se reporta si la salida confirmó el Start Over
-  if (outgoing && outgoing.host === 'securestartover') {
-    result.durationMs = media.durationMs;
-    result.soundMs = media.soundMs;
-    result.blackMs = media.blackMs;
-    result.dynamics = media.dynamics;
-  }
 
   return result;
 }

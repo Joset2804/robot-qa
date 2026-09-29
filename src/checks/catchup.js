@@ -72,6 +72,41 @@ function judge(outgoing, incoming, media) {
   return { status: 'skipped', reason: REASONS.WRONG_MODE, retryable: true };
 }
 
+// Mueve el cursor de la guía al programa anterior.
+//
+// Un LEFT no siempre cambia de programa: los programas largos ocupan
+// varias columnas de la línea de tiempo. Se presiona LEFT hasta que el
+// horario cambie — el título no sirve, hay canales donde todos los
+// programas se llaman igual.
+//
+// Devuelve { ok, steps, program? }
+async function goToPreviousProgram(driver, config, tag) {
+  const start = await ui.readGuideProgram(driver);
+
+  if (!start.timestamp) {
+    logger.warn(`${tag} no se pudo leer el programa en la guía`);
+    return { ok: false, steps: 0 };
+  }
+
+  logger.info(`${tag} en la guía: "${start.title}" ${start.timestamp}`);
+
+  for (let step = 1; step <= config.catchupMaxLeft; step++) {
+    await keys.left();
+    await sleep(config.catchupStepMs);
+
+    const current = await ui.readGuideProgram(driver);
+
+    if (current.timestamp && current.timestamp !== start.timestamp) {
+      logger.info(`${tag} programa anterior en ${step} LEFT: "${current.title}" ${current.timestamp}`);
+      return { ok: true, steps: step, program: current };
+    }
+  }
+
+  // El cursor nunca salió del programa: dura más que los LEFT que dimos
+  logger.warn(`${tag} tras ${config.catchupMaxLeft} LEFT sigue en el mismo programa`);
+  return { ok: false, steps: config.catchupMaxLeft, tooLong: true };
+}
+
 // Navega hasta la pantalla del programa anterior.
 // Devuelve { ok, attempts, reason? }
 async function navigate(canal, ctx) {
@@ -97,15 +132,26 @@ async function navigate(canal, ctx) {
     // tiempo como en la guía rápida.
     await keys.guide();
     await sleep(config.catchupGuideOpenMs);
-    await keys.left();
-    await sleep(config.catchupStepMs);
+
+    const move = await goToPreviousProgram(driver, config, tag);
+
+    if (!move.ok) {
+      // El programa ocupa toda la ventana de la guía: no hay anterior
+      if (move.tooLong) {
+        return { ok: false, attempts: attempt, reason: REASONS.NO_PREVIOUS_PROGRAM, tooLong: true };
+      }
+      // No se pudo leer la guía: puede ser que no abrió, se reintenta
+      reason = REASONS.PLAY_BUTTON_NOT_FOUND;
+      continue;
+    }
+
     await keys.ok();
 
     const screen = await ui.waitDetailScreen(driver, config.catchupDetailTimeoutMs);
 
     if (screen.play) {
       if (attempt > 1) logger.info(`${tag} llegó a "Reproducir"`);
-      return { ok: true, attempts: attempt };
+      return { ok: true, attempts: attempt, program: move.program, leftSteps: move.steps };
     }
 
     // Llegó a la pantalla del programa pero sin botón. Puede ser que el
@@ -131,6 +177,17 @@ async function attempt(canal, ctx) {
   const nav = await navigate(canal, ctx);
 
   if (!nav.ok) {
+
+    // El programa en curso dura más que la ventana de la guía: no hay
+    // un programa anterior al que ir. No es un fallo del servicio.
+    if (nav.tooLong) {
+      return {
+        status: 'skipped',
+        reason: REASONS.NO_PREVIOUS_PROGRAM,
+        navAttempts: nav.attempts
+      };
+    }
+
     // Tras los 3 intentos llegó a la pantalla y nunca ofreció reproducir:
     // el programa no tiene catchup. Es un hallazgo del servicio.
     if (nav.reason === REASONS.NO_CATCHUP_AVAILABLE) {
@@ -175,9 +232,10 @@ async function attempt(canal, ctx) {
 
   const result = Object.assign(judge(outgoing, incoming, media), {
     navAttempts: nav.attempts,
+    leftSteps: nav.leftSteps,
+    program: nav.program ? nav.program.title : undefined,
+    programTime: nav.program ? nav.program.timestamp : undefined,
     observedMode: outgoing ? outgoing.host : undefined,
-    serviceId: incoming ? incoming.serviceId : undefined,
-    position: outgoing ? outgoing.position : undefined
   });
 
   // La medición solo se reporta si la salida confirmó el catchup

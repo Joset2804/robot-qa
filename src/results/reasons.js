@@ -84,6 +84,10 @@ const REASONS = {
   // Se llegó a la pantalla del programa anterior y no ofrece reproducirlo:
   // ese programa no tiene catchup.
   NO_CATCHUP_AVAILABLE: 'no_catchup_available',
+
+  // Tras los LEFT máximos, el cursor nunca salió del programa en curso:
+  // el programa es tan largo que no hay uno anterior al que llegar.
+  NO_PREVIOUS_PROGRAM: 'no_previous_program',
 };
 
 // Traduce el resultado del mediaOpenWatcher a un código de fallo.

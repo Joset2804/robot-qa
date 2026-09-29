@@ -32,7 +32,8 @@ const DEFAULTS = {
 
   // Navegación de catchup
   catchupGuideOpenMs: 3500,     // GUIA → abre la guía de canales
-  catchupStepMs: 2500,          // tras el LEFT al programa anterior
+  catchupStepMs: 2500,          // tras cada LEFT en la guía
+  catchupMaxLeft: 10,           // LEFT máximos buscando el programa anterior
   catchupDetailTimeoutMs: 8000, // máximo esperando la pantalla del programa
 
   // Segundos que se deja reproducir el catchup antes de salir

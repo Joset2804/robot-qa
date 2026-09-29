@@ -43,14 +43,16 @@ function judge(outgoing, incoming, media) {
       return { status: 'skipped', reason: REASONS.WRONG_CHANNEL, retryable: true };
     }
 
-    // Desde acá está confirmado el catchup del canal: los fallos son reales
+    // Confirmado el catchup del canal: los fallos son reales
 
     if (!(outgoing.position > 0)) {
       return { status: 'fail', reason: REASONS.NO_VIDEO };
     }
 
-    if (!media.ok) {
-      return { status: 'fail', reason: reasonFromMediaResult(media) };
+    // Solo se exige video. El catchup arranca al comienzo del programa
+    // anterior, y ahí puede haber créditos sin audio.
+    if (!media.videoAt) {
+      return { status: 'fail', reason: REASONS.NO_VIDEO };
     }
 
     return { status: 'ok' };
@@ -70,17 +72,18 @@ function judge(outgoing, incoming, media) {
   return { status: 'skipped', reason: REASONS.WRONG_MODE, retryable: true };
 }
 
-// Navega hasta la pantalla de detalle del programa anterior.
+// Navega hasta la pantalla del programa anterior.
 // Devuelve { ok, attempts, reason? }
 async function navigate(canal, ctx) {
   const { driver, config } = ctx;
+  let reason = REASONS.PLAY_BUTTON_NOT_FOUND;
 
   for (let attempt = 1; attempt <= config.navAttempts; attempt++) {
     const tag = `[${NAME}] canal ${canal.numero} navegación ${attempt}/${config.navAttempts}`;
 
     // El primer intento parte del zapeo del launcher. Los siguientes
-    // vuelven a zapear: el intento fallido pudo dejar el deco en la guía,
-    // en una pantalla de detalle o en otro canal.
+    // vuelven a zapear: el intento fallido pudo dejar el deco en la guía
+    // o en una pantalla de detalle.
     if (attempt > 1) {
       const z = await zap.zapTo(canal, ctx);
       if (!z.ok) return { ok: false, attempts: attempt, reason: z.reason };
@@ -88,12 +91,12 @@ async function navigate(canal, ctx) {
 
     await miniguide.waitCycle(driver, tag);
 
-    // Tiempos fijos, sin consultas a Appium entre teclas: cada consulta
-    // retrasa la siguiente tecla y la lista se cierra sola a los ~4 s
-    await keys.left();
+    // GUIA abre la guía de canales en el canal actual, con el foco en el
+    // programa que se emite ahora. LEFT lo mueve al anterior.
+    // La guía completa no se cierra sola, así que no hay carrera con el
+    // tiempo como en la guía rápida.
+    await keys.guide();
     await sleep(config.catchupGuideOpenMs);
-    await keys.up();
-    await sleep(config.catchupStepMs);
     await keys.left();
     await sleep(config.catchupStepMs);
     await keys.ok();
@@ -105,18 +108,19 @@ async function navigate(canal, ctx) {
       return { ok: true, attempts: attempt };
     }
 
-    // Llegó a la pantalla del programa anterior, pero no ofrece
-    // reproducirlo: ese programa no tiene catchup. No es un problema
-    // de navegación, así que no tiene sentido reintentar.
+    // Llegó a la pantalla del programa pero sin botón. Puede ser que el
+    // programa no tenga catchup, o que la EPG se esté actualizando justo
+    // ahora: se reintenta, y solo si se repite se da por definitivo.
     if (screen.detail) {
-      logger.warn(`${tag} detalle del programa detectado (details_title) pero sin botón "Reproducir": el programa no tiene catchup`);
-      return { ok: false, attempts: attempt, noCatchup: true };
+      logger.warn(`${tag} detalle del programa detectado (details_title) pero sin botón "Reproducir"`);
+      reason = REASONS.NO_CATCHUP_AVAILABLE;
+    } else {
+      logger.warn(`${tag} no se detectó la pantalla de detalle (sin details_title): la navegación no llegó`);
+      reason = REASONS.PLAY_BUTTON_NOT_FOUND;
     }
-
-    logger.warn(`${tag} no se detectó la pantalla de detalle (sin details_title): la navegación no llegó`);
   }
 
-  return { ok: false, attempts: config.navAttempts, reason: REASONS.PLAY_BUTTON_NOT_FOUND };
+  return { ok: false, attempts: config.navAttempts, reason };
 }
 
 async function attempt(canal, ctx) {
@@ -125,13 +129,15 @@ async function attempt(canal, ctx) {
 
   // 1. Navegación hasta "Reproducir"
   const nav = await navigate(canal, ctx);
+
   if (!nav.ok) {
-    // Llegó a la pantalla y el programa no ofrece catchup: es un hallazgo
-    // del servicio, no de la automatización
-    if (nav.noCatchup) {
+    // Tras los 3 intentos llegó a la pantalla y nunca ofreció reproducir:
+    // el programa no tiene catchup. Es un hallazgo del servicio.
+    if (nav.reason === REASONS.NO_CATCHUP_AVAILABLE) {
       return {
         status: 'fail',
         reason: REASONS.NO_CATCHUP_AVAILABLE,
+        // final: reintentar el check no cambiaría nada
         final: true,
         navAttempts: nav.attempts
       };
@@ -176,8 +182,7 @@ async function attempt(canal, ctx) {
 
   // La medición solo se reporta si la salida confirmó el catchup
   if (outgoing && outgoing.host === 'securecatchup') {
-    result.durationMs = media.durationMs;
-    result.soundMs = media.soundMs;
+    result.durationMs = media.videoMs;
     result.blackMs = media.blackMs;
     result.dynamics = media.dynamics;
   }

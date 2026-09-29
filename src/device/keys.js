@@ -14,7 +14,8 @@ const KEYS = {
   LEFT: 'KEYCODE_DPAD_LEFT',
   RIGHT: 'KEYCODE_DPAD_RIGHT',
   HOME: 'KEYCODE_HOME',
-  BACK: 'KEYCODE_BACK'
+  BACK: 'KEYCODE_BACK',
+  GUIDE: 'KEYCODE_GUIDE'
 };
 
 // Espacio mínimo entre dígitos. El deco pierde teclas si llegan casi
@@ -37,6 +38,7 @@ const left = () => sendKey(KEYS.LEFT);
 const right = () => sendKey(KEYS.RIGHT);
 const home = () => sendKey(KEYS.HOME);
 const back = () => sendKey(KEYS.BACK);
+const guide = () => sendKey(KEYS.GUIDE);
 
 // Marca el canal con una llamada ADB por dígito y confirma con OK.
 // Probado: el deco acepta el número con los dígitos separados entre
@@ -68,5 +70,6 @@ module.exports = {
   right,
   home,
   back,
+  guide,
   zapToChannel
 };

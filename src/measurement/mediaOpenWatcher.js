@@ -183,6 +183,10 @@ class MediaOpenWatcher {
             ? audioStableAt.getTime() - trigger.getTime()
             : undefined,    
 
+          videoMs: (videoStableAt && trigger)
+            ? videoStableAt.getTime() - trigger.getTime()
+            : undefined,
+
           // Tiempo acumulado de pantalla negra y de congelados
           blackMs: sumDuration(videoEvents, ev => ev.mnemonic === 'B' || ev.mnemonic === 'B+'),
           freezeMs: sumDuration(videoEvents, ev => ev.mnemonic === 'F' || ev.mnemonic === 'F+'),

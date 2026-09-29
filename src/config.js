@@ -31,9 +31,9 @@ const DEFAULTS = {
   startOverMinLiveSec: 60,
 
   // Navegación de catchup
-  catchupGuideOpenMs: 3500,     // LEFT → aparece la lista de canales y programas
-  catchupStepMs: 2500,          // tras UP y tras el segundo LEFT
-  catchupDetailTimeoutMs: 8000, // máximo esperando el botón "Reproducir"
+  catchupGuideOpenMs: 3500,     // GUIA → abre la guía de canales
+  catchupStepMs: 2500,          // tras el LEFT al programa anterior
+  catchupDetailTimeoutMs: 8000, // máximo esperando la pantalla del programa
 
   // Segundos que se deja reproducir el catchup antes de salir
   catchupPlaySec: 20,

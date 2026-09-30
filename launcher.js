@@ -13,6 +13,7 @@ const report = require('./src/results/report');
 const backup = require('./src/results/backup');
 const config = require('./src/config');
 const telegram = require('./src/results/telegram');
+const { REASONS } = require('./src/results/reasons');
 
 // Intentos por check: el original más uno de confirmación.
 const MAX_ATTEMPTS = 2;
@@ -110,7 +111,12 @@ async function runChannel(canal, selected, reportsLive, ctx) {
   const startedAt = new Date().toISOString();
 
   for (const check of selected) {
-    results[check.name] = await runCheck(check, canal, ctx);
+    try {
+      results[check.name] = await runCheck(check, canal, ctx);
+    } catch (err) {
+      logger.error(`[${check.name}] canal ${canal.numero} — excepción no controlada: ${err}`);
+      results[check.name] = { status: 'skipped', reason: REASONS.UNEXPECTED_ERROR };
+    }
   }
 
   if (!reportsLive) delete results.live;

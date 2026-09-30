@@ -45,7 +45,7 @@ async function run(canal, driver, ctx) {
     return await attempt(canal, ctx);
   } catch (err) {
     logger.error(`[${NAME}] error inesperado en canal ${canal.numero}: ${err}`);
-    return { status: 'fail', reason: REASONS.UNEXPECTED_ERROR };
+    return { status: 'skipped', reason: REASONS.UNEXPECTED_ERROR };
   }
 }
 

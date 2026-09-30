@@ -19,6 +19,8 @@
 const keys = require('../device/keys');
 const zap = require('../device/zap');
 const miniguide = require('../device/miniguide');
+const { measure } = require('../measurement/mediaOpenWatcher');
+const { REASONS, reasonFromMediaResult } = require('../results/reasons');
 
 const NAME = 'startOver';
 
@@ -144,7 +146,7 @@ async function run(canal, driver, ctx) {
     return await attempt(canal, ctx);
   } catch (err) {
     logger.error(`[${NAME}] error inesperado en canal ${canal.numero}: ${err}`);
-    return { status: 'fail', reason: REASONS.UNEXPECTED_ERROR };
+    return { status: 'skipped', reason: REASONS.UNEXPECTED_ERROR };
   }
 }
 

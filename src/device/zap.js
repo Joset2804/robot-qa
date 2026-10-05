@@ -13,26 +13,39 @@ const ui = require('./ui');
 const { measure } = require('../measurement/mediaOpenWatcher');
 const { REASONS } = require('../results/reasons');
 
-// Revisa la app al frente y, si no es el launcher, presiona HOME.
-// Devuelve false si después de HOME sigue fuera.
-async function ensureLauncher(driver, config, tag) {
+// Antes de zapear, el deco tiene que estar donde los números sintonizan.
+// Dos casos donde no:
+//   - otra app al frente (YouTube, Netflix): no procesa los números
+//   - la guía de canales: los números mueven el cursor sin sintonizar
+// En ambos se presiona HOME para volver.
+// Devuelve { ok, reason? }
+async function ensureCanZap(driver, config, tag) {
   const pkg = await ui.currentPackage(driver);
+  const outside = !!pkg && pkg !== ui.LAUNCHER_PACKAGE;
 
-  // Si no se pudo leer, se sigue igual: la confirmación por logcat
-  // detecta de todas formas un zapeo que no llegó.
-  if (!pkg || pkg === ui.LAUNCHER_PACKAGE) return true;
+  // La guía es parte del launcher: solo se revisa si estamos en él
+  const inGuide = !outside && await ui.isGuideOpen(driver);
 
-  logger.warn(`${tag} fuera del launcher (${pkg}) — presionando HOME`);
+  if (!outside && !inGuide) return { ok: true };
+
+  const where = outside ? `fuera del launcher (${pkg})` : 'en la guía de canales';
+  logger.warn(`${tag} ${where} — presionando HOME`);
+
   await keys.home();
   await sleep(config.homeRecoveryWaitMs);
 
   const after = await ui.currentPackage(driver);
   if (after && after !== ui.LAUNCHER_PACKAGE) {
     logger.warn(`${tag} sigue fuera del launcher (${after})`);
-    return false;
+    return { ok: false, reason: REASONS.OUTSIDE_LAUNCHER };
   }
 
-  return true;
+  if (await ui.isGuideOpen(driver)) {
+    logger.warn(`${tag} sigue en la guía de canales`);
+    return { ok: false, reason: REASONS.STUCK_IN_GUIDE };
+  }
+
+  return { ok: true };
 }
 
 async function zapTo(canal, ctx, options = {}) {
@@ -42,8 +55,9 @@ async function zapTo(canal, ctx, options = {}) {
   for (let attempt = 1; attempt <= config.zapAttempts; attempt++) {
     const tag = `[zap] canal ${canal.numero} (${attempt}/${config.zapAttempts})`;
 
-    if (!(await ensureLauncher(driver, config, tag))) {
-      reason = REASONS.OUTSIDE_LAUNCHER;
+    const ready = await ensureCanZap(driver, config, tag);
+    if (!ready.ok) {
+      reason = ready.reason;
       continue;
     }
 

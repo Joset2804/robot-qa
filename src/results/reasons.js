@@ -88,6 +88,11 @@ const REASONS = {
   // Tras los LEFT máximos, el cursor nunca salió del programa en curso:
   // el programa es tan largo que no hay uno anterior al que llegar.
   NO_PREVIOUS_PROGRAM: 'no_previous_program',
+
+  // El deco quedó en la guía de canales y HOME no lo sacó. En la guía,
+  // los números mueven el cursor en vez de sintonizar.
+  // Es un problema de la automatización, no del canal: no alerta.
+  STUCK_IN_GUIDE: 'stuck_in_guide',
 };
 
 // Traduce el resultado del mediaOpenWatcher a un código de fallo.

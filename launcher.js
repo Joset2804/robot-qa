@@ -14,6 +14,7 @@ const backup = require('./src/results/backup');
 const config = require('./src/config');
 const telegram = require('./src/results/telegram');
 const { REASONS } = require('./src/results/reasons');
+const localTime = require('./src/localTime');
 
 // Intentos por check: el original más uno de confirmación.
 const MAX_ATTEMPTS = 2;
@@ -139,6 +140,15 @@ async function main() {
   const requested = input.checks;
   const meta = { startedAt, requestedChecks: requested || [] };
 
+  // Datos de la pasada, calculados una sola vez al arrancar. Todos sus
+  // canales van al archivo del día en que empezó, aunque la pasada
+  // termine al día siguiente.
+  const run = {
+    id: startedAt,
+    fileDate: localTime.localDate(startedAt, cfg.utcOffset)
+  };
+  logger.info(`[launcher] pasada ${run.id} → archivo ${run.fileDate}`);
+
   if (channels.length === 0) {
     logger.error('[launcher] input.channels vacío — nada que verificar');
     return report.publish([], Object.assign({ completed: false }, meta));
@@ -181,7 +191,7 @@ async function main() {
 
       // Se guarda enseguida: si la ejecución se interrumpe, lo ya
       // verificado queda en disco
-      await backup.saveChannel(entry, cfg.utcOffset);
+      await backup.saveChannel(entry, run);
       await telegram.alertChannel(entry, input.telegram, cfg.utcOffset);
       channelResults.push(entry);
     }

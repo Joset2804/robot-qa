@@ -12,13 +12,6 @@ const DIR = path.join(__dirname, '..', '..', 'data');
 const PREFIX = 'check_';
 const RETENTION_DAYS = 5;
 
-// Nombre de archivo del día actual.
-// Se calcula en cada llamada, no una vez al arrancar, para que una
-// ejecución que cruce la medianoche escriba en el archivo correcto.
-function currentFile(utcOffset) {
-  return path.join(DIR, `${PREFIX}${localTime.localDate(null, utcOffset)}.ndjson`);
-}
-
 async function ensureDir() {
   try {
     await fs.mkdir(DIR, { recursive: true });
@@ -27,15 +20,20 @@ async function ensureDir() {
   }
 }
 
-// Guarda un canal. Se llama apenas termina, no al final de la ejecución:
-// una pasada del catálogo dura horas, y si se interrumpe no se pierde
-// lo ya verificado.
-async function saveChannel(entry, utcOffset) {
+function fileFor(fileDate) {
+  return path.join(DIR, `${PREFIX}${fileDate}.ndjson`);
+}
+
+// Guarda un canal en el archivo del día en que EMPEZÓ su pasada.
+// run = { id, fileDate }, calculado una vez al arrancar la pasada:
+// así una pasada que cruza la medianoche queda entera en un archivo.
+async function saveChannel(entry, run) {
   await ensureDir();
 
   const line = JSON.stringify({
     timestamp: new Date().toISOString(),
     probe: require('os').hostname(),
+    runId: run.id,
     channel: entry.channel,
     channelName: entry.channelName,
     startedAt: entry.startedAt,
@@ -44,7 +42,7 @@ async function saveChannel(entry, utcOffset) {
   }) + '\n';
 
   try {
-    await fs.appendFile(currentFile(utcOffset), line);
+    await fs.appendFile(fileFor(run.fileDate), line);
   } catch (err) {
     logger.warn(`[backup] no se pudo guardar el canal ${entry.channel}: ${err}`);
   }
@@ -84,4 +82,4 @@ async function cleanup(utcOffset) {
   }
 }
 
-module.exports = { saveChannel, cleanup, currentFile, RETENTION_DAYS };
+module.exports = { saveChannel, cleanup, fileFor, RETENTION_DAYS };

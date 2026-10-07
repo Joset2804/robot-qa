@@ -31,7 +31,7 @@ async function saveChannel(entry, run) {
   await ensureDir();
 
   const line = JSON.stringify({
-    timestamp: new Date().toISOString(),
+    timestamp: localTime.localStamp(null, run.utcOffset),
     probe: require('os').hostname(),
     runId: run.id,
     channel: entry.channel,

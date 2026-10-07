@@ -51,11 +51,16 @@ function logFinal(check, canal, result) {
   }
 }
 
+// Hora actual en hora local de la sonda: yyyy-mm-dd hh:mm:ss
+function nowLocal(ctx) {
+  return localTime.localStamp(null, ctx.config.utcOffset);
+}
+
 async function runCheck(check, canal, ctx) {
   let result;
   let tries = 0;
 
-  const startedAt = new Date().toISOString();
+  const startedAt = nowLocal(ctx);
 
   logger.info(`[${check.name}] canal ${canal.numero} — iniciando`);
 
@@ -100,8 +105,8 @@ async function runCheck(check, canal, ctx) {
   if (tries > 1) result.retried = true;
 
   result.startedAt = startedAt;
-  result.finishedAt = new Date().toISOString();
-
+  result.finishedAt = nowLocal(ctx);
+  
   clean(result);
   logFinal(check, canal, result);
   return result;
@@ -109,7 +114,7 @@ async function runCheck(check, canal, ctx) {
 
 async function runChannel(canal, selected, reportsLive, ctx) {
   const results = {};
-  const startedAt = new Date().toISOString();
+  const startedAt = nowLocal(ctx);
 
   for (const check of selected) {
     try {
@@ -126,7 +131,7 @@ async function runChannel(canal, selected, reportsLive, ctx) {
     channel: canal.numero,
     channelName: canal.nombre,
     startedAt,
-    finishedAt: new Date().toISOString(),
+    finishedAt: nowLocal(ctx),
     checks: results
   };
 }
@@ -144,8 +149,9 @@ async function main() {
   // canales van al archivo del día en que empezó, aunque la pasada
   // termine al día siguiente.
   const run = {
-    id: startedAt,
-    fileDate: localTime.localDate(startedAt, cfg.utcOffset)
+    id: localTime.localStamp(startedAt, cfg.utcOffset),
+    fileDate: localTime.localDate(startedAt, cfg.utcOffset),
+    utcOffset: cfg.utcOffset
   };
   logger.info(`[launcher] pasada ${run.id} → archivo ${run.fileDate}`);
 

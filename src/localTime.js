@@ -30,4 +30,12 @@ function localShort(date, utcOffset) {
   return `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
 }
 
-module.exports = { localDate, localShort };
+// yyyy-mm-dd hh:mm:ss en hora local de la sonda, sin zona ni sufijo.
+// Es el formato de todas las fechas del NDJSON.
+function localStamp(date, utcOffset) {
+  const d = shifted(date, utcOffset);
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ` +
+    `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+}
+
+module.exports = { localDate, localShort, localStamp };

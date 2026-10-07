@@ -94,6 +94,12 @@ function escape(text) {
     .replace(/>/g, '&gt;');
 }
 
+// "2026-10-05 20:14:33" → "05/10 20:14". La fecha ya viene en hora local.
+function shortFromStamp(stamp) {
+  const m = String(stamp || '').match(/^\d{4}-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);
+  return m ? `${m[2]}/${m[1]} ${m[3]}:${m[4]}` : '';
+}
+
 // Envía la alerta de un canal, si tiene checks fallidos.
 // entry es lo que devuelve runChannel.
 async function alertChannel(entry, config, utcOffset) {
@@ -110,7 +116,7 @@ async function alertChannel(entry, config, utcOffset) {
 
   const name = entry.channelName ? ` · ${escape(entry.channelName)}` : '';
   const header = `⚠️ <b>Canal ${entry.channel}${name}</b>`;
-  const meta = `<i>${escape(os.hostname())} · ${localTime.localShort(entry.finishedAt, utcOffset)}</i>`;
+  const meta = `<i>${escape(os.hostname())} · ${shortFromStamp(entry.finishedAt)}</i>`;
   const text = `${header}\n${meta}\n\n${lines.join('\n')}`;
 
   try {
